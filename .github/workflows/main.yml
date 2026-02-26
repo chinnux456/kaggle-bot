@@ -1,0 +1,60 @@
+name: Kaggle Bot Runner
+
+on:
+  # ONLY triggered by n8n - NO automatic schedule here!
+  repository_dispatch:
+    types: [trigger-kaggle]
+  
+  # Manual trigger for testing
+  workflow_dispatch:
+
+# ANTI-BAN: Only 1 run at a time, never overlap
+concurrency:
+  group: kaggle-single-run
+  cancel-in-progress: false
+
+jobs:
+  run-kaggle:
+    name: 🚀 Run Kaggle Notebook
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: 📦 Install Kaggle CLI
+        run: pip install kaggle --quiet
+      
+      - name: 🔐 Configure Kaggle
+        run: |
+          mkdir -p ~/.kaggle
+          echo '{"username":"${{ secrets.KAGGLE_USERNAME }}","key":"${{ secrets.KAGGLE_KEY }}"}' > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+      
+      - name: 🔄 Update Metadata
+        run: |
+          sed -i "s/KAGGLE_USERNAME_PLACEHOLDER/${{ secrets.KAGGLE_USERNAME }}/g" kernel-metadata.json
+      
+      - name: 🚀 Push to Kaggle
+        run: |
+          echo "════════════════════════════════════════════════════════"
+          echo "  🚀 STARTING KAGGLE NOTEBOOK"
+          echo "  📅 $(date '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "════════════════════════════════════════════════════════"
+          
+          kaggle kernels push -p .
+          
+          echo ""
+          echo "✅ SUCCESS!"
+          echo "📊 View: https://www.kaggle.com/code/${{ secrets.KAGGLE_USERNAME }}/my-bot"
+      
+      - name: ⏳ Verify Started
+        run: |
+          sleep 60
+          kaggle kernels status ${{ secrets.KAGGLE_USERNAME }}/my-bot || true
