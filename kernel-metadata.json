@@ -1,9 +1,9 @@
 {
   "id": "KAGGLE_USERNAME_PLACEHOLDER/my-bot",
   "title": "My Bot",
-  "code_file": "notebook.py",
+  "code_file": "notebook.ipynb",
   "language": "python",
-  "kernel_type": "script",
+  "kernel_type": "notebook",
   "is_private": true,
   "enable_gpu": false,
   "enable_internet": true,
