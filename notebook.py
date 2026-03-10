@@ -2,7 +2,7 @@
 """
 ════════════════════════════════════════════════════════════════════════════════
  KAGGLE BOT - SAFE AUTOMATED RUNNER
- ✅ Anti-Sleep | ✅ Anti-Disconnect | ✅ 11 Hour Runtime | ✅ Auto-Shutdown
+ ✅ Anti-Sleep | ✅ Anti-Disconnect | ✅ 6 Hour Runtime | ✅ Auto-Shutdown
 ════════════════════════════════════════════════════════════════════════════════
 """
 
@@ -13,13 +13,14 @@ import signal
 import threading
 import subprocess
 import re
+import random
 from datetime import datetime, timedelta
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  CONFIGURATION - CHANGE YOUR GOOGLE DRIVE FILE ID HERE
+#  CONFIGURATION
 # ══════════════════════════════════════════════════════════════════════════════
 SCRIPT_FILE_ID = "1xqp8vWaWqnIygHZUjjNmE7Umn-WP8g46"
-MAX_RUNTIME_HOURS = 11
+MAX_RUNTIME_HOURS = 6
 MAX_RUNTIME_SECONDS = MAX_RUNTIME_HOURS * 60 * 60
 START_TIME = time.time()
 
@@ -38,57 +39,131 @@ print("=" * 70)
 print()
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  ANTI-SLEEP / KEEP-ALIVE SYSTEM
+#  ENHANCED ANTI-SLEEP / KEEP-ALIVE SYSTEM
 # ══════════════════════════════════════════════════════════════════════════════
 class KeepAliveSystem:
     def __init__(self):
         self.running = True
         self.thread = None
         self.ping_count = 0
+        self.memory_anchor = []  # Prevents memory cleanup
+    
+    def _cpu_activity(self):
+        """Generate CPU activity to prevent idle detection"""
+        # Multiple types of activity
+        _ = sum(range(random.randint(5000, 15000)))
+        _ = [x**2 for x in range(1000)]
+        _ = "".join([chr(random.randint(65, 90)) for _ in range(100)])
+        
+    def _memory_activity(self):
+        """Prevent memory from being flagged as unused"""
+        self.memory_anchor.append(time.time())
+        if len(self.memory_anchor) > 100:
+            self.memory_anchor = self.memory_anchor[-50:]
+    
+    def _disk_activity(self):
+        """Small disk I/O to show activity"""
+        try:
+            with open("/tmp/.kaggle_heartbeat", "w") as f:
+                f.write(str(time.time()))
+        except:
+            pass
     
     def _keep_alive_loop(self):
         while self.running:
             elapsed = time.time() - START_TIME
             remaining = MAX_RUNTIME_SECONDS - elapsed
             
+            # Auto-stop after 6 hours
             if remaining <= 0:
-                print("\n[TIME] 11 hours reached! Shutting down...")
+                print("\n" + "=" * 70)
+                print("[TIME] 6 hours reached! Auto-shutting down...")
+                print("=" * 70)
                 self.running = False
                 os._exit(0)
                 break
             
+            # Warning at 5 minutes remaining
+            if remaining <= 300 and remaining > 240:
+                print(f"\n[WARNING] Only {int(remaining//60)} minutes remaining!")
+            
             self.ping_count += 1
             
-            if self.ping_count % 30 == 0:
+            # === ANTI-SLEEP ACTIVITIES ===
+            self._cpu_activity()
+            self._memory_activity()
+            
+            # Disk activity every 5 minutes
+            if self.ping_count % 5 == 0:
+                self._disk_activity()
+            
+            # Status update every 15 minutes (instead of 30)
+            if self.ping_count % 15 == 0:
                 elapsed_hrs = int(elapsed // 3600)
                 elapsed_mins = int((elapsed % 3600) // 60)
                 remaining_hrs = int(remaining // 3600)
                 remaining_mins = int((remaining % 3600) // 60)
-                print(f"[ALIVE] Elapsed: {elapsed_hrs}h {elapsed_mins}m | Remaining: {remaining_hrs}h {remaining_mins}m")
+                print(f"[ALIVE] ⏱️ Elapsed: {elapsed_hrs}h {elapsed_mins}m | Remaining: {remaining_hrs}h {remaining_mins}m | Pings: {self.ping_count}")
             
-            _ = sum(range(10000))
-            time.sleep(60)
+            # Random sleep interval (45-75 seconds) to appear more natural
+            time.sleep(random.randint(45, 75))
     
     def start(self):
         self.thread = threading.Thread(target=self._keep_alive_loop, daemon=True)
         self.thread.start()
-        print("[OK] Anti-Sleep system: ACTIVATED")
-        print("[OK] Auto-Shutdown timer: ACTIVATED (11 hours)")
+        print("[✓] Anti-Sleep system: ACTIVATED")
+        print("[✓] Anti-Disconnect protection: ACTIVATED")
+        print("[✓] Auto-Shutdown timer: ACTIVATED (6 hours)")
         print()
     
     def stop(self):
         self.running = False
         print("[STOP] Keep-Alive system: STOPPED")
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  SECONDARY HEARTBEAT (Extra Protection)
+# ══════════════════════════════════════════════════════════════════════════════
+class HeartbeatSystem:
+    def __init__(self):
+        self.running = True
+        self.thread = None
+    
+    def _heartbeat_loop(self):
+        while self.running:
+            elapsed = time.time() - START_TIME
+            if elapsed >= MAX_RUNTIME_SECONDS:
+                break
+            
+            # Simple stdout activity
+            sys.stdout.flush()
+            sys.stderr.flush()
+            
+            # Every 10 minutes, print a dot to show activity
+            time.sleep(600)
+            if self.running:
+                print(".", end="", flush=True)
+    
+    def start(self):
+        self.thread = threading.Thread(target=self._heartbeat_loop, daemon=True)
+        self.thread.start()
+    
+    def stop(self):
+        self.running = False
+
+# Initialize protection systems
 keep_alive = KeepAliveSystem()
 keep_alive.start()
+
+heartbeat = HeartbeatSystem()
+heartbeat.start()
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  SHUTDOWN HANDLERS
 # ══════════════════════════════════════════════════════════════════════════════
 def graceful_shutdown(signum, frame):
-    print("\n[STOP] Shutdown signal received. Exiting...")
+    print("\n[STOP] Shutdown signal received. Exiting gracefully...")
     keep_alive.stop()
+    heartbeat.stop()
     sys.exit(0)
 
 signal.signal(signal.SIGTERM, graceful_shutdown)
@@ -110,17 +185,26 @@ print("[2/4] Downloading my_script.py from Google Drive...")
 if os.path.exists("my_script.py"):
     os.remove("my_script.py")
 
-result = subprocess.run(
-    ["gdown", SCRIPT_FILE_ID, "-O", "my_script.py"],
-    capture_output=True,
-    text=True
-)
+# Retry mechanism for download (Anti-Disconnect)
+download_success = False
+for attempt in range(3):
+    result = subprocess.run(
+        ["gdown", SCRIPT_FILE_ID, "-O", "my_script.py"],
+        capture_output=True,
+        text=True
+    )
+    
+    if os.path.exists("my_script.py") and os.path.getsize("my_script.py") > 0:
+        file_size = os.path.getsize("my_script.py")
+        print(f"[OK] Downloaded! Size: {file_size:,} bytes")
+        download_success = True
+        break
+    else:
+        print(f"[RETRY] Download attempt {attempt + 1}/3 failed, retrying...")
+        time.sleep(5)
 
-if os.path.exists("my_script.py"):
-    file_size = os.path.getsize("my_script.py")
-    print(f"[OK] Downloaded! Size: {file_size:,} bytes")
-else:
-    print("[ERROR] Download FAILED!")
+if not download_success:
+    print("[ERROR] Download FAILED after 3 attempts!")
     print(f"Error: {result.stderr}")
     sys.exit(1)
 print()
@@ -173,17 +257,20 @@ while restart_count < MAX_RESTARTS:
         break
     
     try:
+        print(f"[RUN] Executing script... (Attempt {restart_count + 1})")
         exec(open("my_script.py", encoding='utf-8').read())
         break
         
     except KeyboardInterrupt:
-        print("\n[WARN] Interrupted")
+        print("\n[WARN] Interrupted by user")
         break
         
     except SystemExit as e:
         if e.code == 0:
+            print("[OK] Script exited normally")
             break
         restart_count += 1
+        print(f"[WARN] Script exited with code {e.code}")
         
     except Exception as e:
         restart_count += 1
@@ -197,11 +284,14 @@ while restart_count < MAX_RESTARTS:
 total_runtime = time.time() - START_TIME
 hours = int(total_runtime // 3600)
 mins = int((total_runtime % 3600) // 60)
+secs = int(total_runtime % 60)
 
 print()
 print("=" * 70)
 print("  SESSION COMPLETED")
-print(f"  Runtime: {hours}h {mins}m")
+print(f"  Total Runtime: {hours}h {mins}m {secs}s")
+print(f"  Restarts: {restart_count}")
 print("=" * 70)
 
 keep_alive.stop()
+heartbeat.stop()
